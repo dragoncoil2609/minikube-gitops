@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: reactsurvey
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/dragoncoil2609/minikube-gitops.git
+    targetRevision: main
+    path: apps/reactsurvey
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: reactsurvey
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
