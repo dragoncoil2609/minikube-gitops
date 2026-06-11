@@ -26,6 +26,10 @@ spec:
           service:
             type: NodePort
 
+        kubelet:
+          serviceMonitor:
+            insecureSkipVerify: true
+
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring
