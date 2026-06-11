@@ -28,9 +28,6 @@ spec:
         nodeExporter:
           enabled: false
 
-        defaultRules:
-          create: false
-
         kubelet:
           serviceMonitor:
             insecureSkipVerify: true
