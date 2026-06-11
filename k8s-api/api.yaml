@@ -24,9 +24,9 @@ spec:
           containerPort: 8080
         env:
         - name: ERROR_RATE
-          value: "0"
+          value: "0.5" # Cố tình tạo ra 50% lỗi để test tự động Abort
         - name: VERSION
-          value: "v2"
+          value: "v3"
         readinessProbe:
           httpGet:
             path: /healthz
@@ -35,7 +35,12 @@ spec:
     canary:
       steps:
       - setWeight: 25
-      - pause: {}
+      - analysis:
+          templates:
+          - templateName: success-rate
+          args:
+          - name: service-name
+            value: api
       - setWeight: 50
       - pause: { duration: 30s }
       - setWeight: 100
