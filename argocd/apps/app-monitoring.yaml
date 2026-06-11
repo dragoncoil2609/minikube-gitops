@@ -19,6 +19,8 @@ spec:
             type: NodePort
 
         prometheus:
+          prometheusSpec:
+            serviceMonitorSelectorNilUsesHelmValues: false
           service:
             type: NodePort
 
