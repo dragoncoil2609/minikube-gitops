@@ -21,14 +21,8 @@ spec:
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
-          env:
-            - name: DB_HOST
-              value: "db"
-            - name: DB_USER
-              value: "root"
-            - name: DB_PASSWORD
-              value: "123456"
-            - name: DB_NAME
-              value: "crud_db"
-            - name: PORT
-              value: "3000"
+          envFrom:
+            - configMapRef:
+                name: reactsurvey-config
+            - secretRef:
+                name: reactsurvey-secret

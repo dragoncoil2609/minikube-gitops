@@ -20,8 +20,14 @@ spec:
           image: mysql:8.0
           env:
             - name: MYSQL_ROOT_PASSWORD
-              value: "123456"
+              valueFrom:
+                secretKeyRef:
+                  name: reactsurvey-secret
+                  key: DB_PASSWORD
             - name: MYSQL_DATABASE
-              value: "crud_db"
+              valueFrom:
+                configMapKeyRef:
+                  name: reactsurvey-config
+                  key: DB_NAME
           ports:
             - containerPort: 3306
