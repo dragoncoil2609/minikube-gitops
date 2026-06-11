@@ -31,6 +31,9 @@ spec:
                   key: DB_NAME
           ports:
             - containerPort: 3306
+          volumeMounts:
+            - name: db-storage
+              mountPath: /var/lib/mysql
           resources:
             requests:
               cpu: "100m"
@@ -38,3 +41,7 @@ spec:
             limits:
               cpu: "300m"
               memory: "512Mi"
+      volumes:
+        - name: db-storage
+          persistentVolumeClaim:
+            claimName: db-pvc
