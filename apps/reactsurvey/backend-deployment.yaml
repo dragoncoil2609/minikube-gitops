@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: huyhoang2609/crud_backend:05002df
+          image: huyhoang2609/crud_backend:419635d
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
