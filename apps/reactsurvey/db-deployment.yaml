@@ -31,3 +31,10 @@ spec:
                   key: DB_NAME
           ports:
             - containerPort: 3306
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "300m"
+              memory: "512Mi"
