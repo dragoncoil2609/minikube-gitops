@@ -41,6 +41,7 @@ spec:
               repeat_interval: 1h
               receiver: 'email-alert'
             receivers:
+            - name: 'null'
             - name: 'email-alert'
               email_configs:
               - to: 'nguyenvanhuyhoang2609@gmail.com'
