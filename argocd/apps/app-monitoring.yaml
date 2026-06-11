@@ -23,8 +23,13 @@ spec:
             type: NodePort
 
         alertmanager:
-          service:
-            type: NodePort
+          enabled: false
+
+        nodeExporter:
+          enabled: false
+
+        defaultRules:
+          create: false
 
         kubelet:
           serviceMonitor:
