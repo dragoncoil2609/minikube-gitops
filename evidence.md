@@ -1,64 +1,163 @@
-# Báo Cáo Triển Khai: GitOps & Ship Smartly (ArgoCD, Rollouts, Canary & SLO)
+# Báo Cáo Thực Hành: GitOps & Ship Smartly (ArgoCD, Rollouts, Canary & SLO)
 
-Tài liệu này tổng hợp toàn bộ quá trình thực hành từ con số 0 đến một hệ thống CI/CD & Observability hoàn chỉnh, tuân thủ tuyệt đối nguyên tắc GitOps.
+Tài liệu này tổng hợp chi tiết từng bước thực hành từ việc dựng cụm cơ bản đến thiết lập hệ thống CI/CD & Observability hoàn chỉnh, tuân thủ nghiêm ngặt nguyên tắc GitOps (Mã nguồn là nguồn sự thật duy nhất).
 
 ---
 
 ## PHẦN 1: NỀN TẢNG GITOPS (BUỔI SÁNG)
 
-### 1. Dựng cụm và khởi tạo Git (Lab 0)
-- Khởi tạo cụm Kubernetes local bằng Minikube: `minikube start -p w9 --driver=docker`.
-- Tạo repository `minikube-gitops` trên GitHub làm "Nguồn sự thật duy nhất" (Single Source of Truth).
+### Lab 0: Khởi tạo Cụm và Đẩy Code lên Git
+**Mục tiêu:** Cài đặt môi trường Kubernetes cơ bản với Minikube và kết nối với GitHub.
+**Các bước thực hiện:**
+1. **Khởi tạo cụm K8s local:** Sử dụng Docker driver.
+   ```bash
+   minikube start -p w9 --driver=docker
+   kubectl config use-context w9
+   ```
+2. **Khởi tạo Git repo:** Tạo thư mục `minikube-gitops`, khởi tạo Git và thiết lập cấu trúc ban đầu.
+3. **Đẩy lên GitHub:**
+   ```bash
+   git init && git add . && git commit -m "init"
+   git branch -M main
+   git remote add origin https://github.com/dragoncoil2609/minikube-gitops.git
+   git push -u origin main
+   ```
 
-### 2. Cài đặt ArgoCD (Lab 1)
-- Cài đặt "người thợ" ArgoCD trực tiếp vào cụm qua lệnh `kubectl apply --server-side -n argocd -f <link_cài_đặt>`.
-- Port-forward và lấy mật khẩu khởi tạo để truy cập vào UI của ArgoCD.
+### Lab 1: Cài đặt ArgoCD vào Cụm
+**Mục tiêu:** Đưa "người thợ" ArgoCD vào K8s để theo dõi sát sao Git repo.
+**Các bước thực hiện:**
+1. Tạo namespace và áp dụng file cài đặt chính thức (dùng cờ `--server-side` để tránh lỗi CRD quá lớn):
+   ```bash
+   kubectl create ns argocd
+   kubectl apply --server-side -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+   ```
+2. Chờ các Pod chạy lên và Port-forward để mở giao diện UI:
+   ```bash
+   kubectl port-forward svc/argocd-server -n argocd 8080:443
+   ```
+3. Lấy mật khẩu đăng nhập tài khoản `admin`:
+   ```bash
+   kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
+   ```
 
-### 3. Application, Sync & Self-Heal (Lab 2 & 3)
-- Tạo định nghĩa `Application` cho ứng dụng (ví dụ: `reactsurvey`). Lần đầu tiên, ta apply bằng tay lệnh `kubectl apply -f argocd/apps/reactsurvey.yaml`.
-- **Sync:** Cập nhật file manifest trên Git (ví dụ tăng replicas), ArgoCD sẽ tự động nhận diện và đồng bộ trạng thái xuống cụm k8s.
-- **Self-heal:** Thử nghiệm sửa thủ công trên cụm (scale tay replicas lên 9), ArgoCD ngay lập tức phát hiện lệch pha (OutOfSync) và tự động "chữa lành", ép số lượng Pod về lại đúng với cấu hình trên Git.
+### Lab 2 & 3: Khởi tạo Application & Tính năng Self-Heal
+**Mục tiêu:** Cấu hình ứng dụng thông qua GitOps và kiểm tra khả năng tự chữa lành.
+**Các bước thực hiện:**
+1. Khai báo ứng dụng bằng cách tạo file `argocd/apps/reactsurvey.yaml` (trỏ đến thư mục mã nguồn k8s của app).
+   ```yaml
+   apiVersion: argoproj.io/v1alpha1
+   kind: Application
+   metadata:
+     name: reactsurvey
+     namespace: argocd
+   spec:
+     source:
+       repoURL: https://github.com/dragoncoil2609/minikube-gitops.git
+       path: apps/reactsurvey
+     destination:
+       server: https://kubernetes.default.svc
+       namespace: reactsurvey
+     syncPolicy:
+       automated:
+         prune: true
+         selfHeal: true
+   ```
+2. **Apply lần đầu:** Dùng lệnh `kubectl apply -f argocd/apps/reactsurvey.yaml` để báo cho ArgoCD biết về ứng dụng này.
+3. **Kiểm thử Sync:** Thay đổi số lượng replicas trên Git, Push lên. ArgoCD tự động kéo cấu hình về và cập nhật số Pod.
+4. **Kiểm thử Self-Heal:** Thử thao tác tay trên Terminal (`kubectl scale deploy ... --replicas=9`). ArgoCD lập tức nhận diện trạng thái thực tế lệch với Git (OutOfSync) và tự động ép số replicas về đúng như trên file YAML, chặn đứng các can thiệp thủ công.
 
-### 4. Rollback chuẩn GitOps (Lab 4)
-- **Rollback chuẩn:** Thực hiện lệnh `git revert HEAD` để khôi phục code trên Git về trạng thái ổn định. ArgoCD sẽ tự động Sync cụm về theo.
-- Không sử dụng `kubectl rollout undo` vì thao tác này làm sai lệch trạng thái thực tế so với Git, và ArgoCD sẽ tiếp tục "Self-heal" đè lên.
+### Lab 4: Rollback An Toàn Qua Git
+**Mục tiêu:** Đưa ứng dụng về phiên bản cũ an toàn khi xảy ra lỗi.
+**Các bước thực hiện:**
+1. Thay vì dùng `kubectl rollout undo` (cách làm mất đồng bộ với Git), ta sử dụng tính năng Revert của Git:
+   ```bash
+   git revert HEAD --no-edit
+   git push
+   ```
+2. Sau khi push, mã nguồn trên Git trở về trạng thái của commit trước. ArgoCD đồng bộ sự thay đổi này xuống cụm K8s, hoàn tất quá trình Rollback. Cách này đảm bảo lịch sử minh bạch: "Ai đã rollback, vào lúc nào, tại sao".
 
-### 5. Mô hình App-of-Apps (Lab 5)
-- Thay vì apply tay từng app, ta tạo một "Root Application" (`argocd/root.yaml`) quản lý toàn bộ thư mục `argocd/apps/`.
-- Áp dụng lệnh `kubectl apply -f argocd/root.yaml` **lần cuối cùng**.
-- Từ thời điểm này, để thêm app mới (như Prometheus, Rollouts), ta chỉ cần thả file cấu hình vào thư mục `argocd/apps/` và Push lên Git. Root App sẽ tự động sinh ra các App con.
+### Lab 5: Mô Hình App-of-Apps (Root Application)
+**Mục tiêu:** Quản lý tập trung mọi ứng dụng thông qua 1 điểm duy nhất, không bao giờ phải gõ `kubectl apply` nữa.
+**Các bước thực hiện:**
+1. Tạo file `argocd/root.yaml`:
+   ```yaml
+   apiVersion: argoproj.io/v1alpha1
+   kind: Application
+   metadata: { name: root, namespace: argocd }
+   spec:
+     source:
+       repoURL: https://github.com/dragoncoil2609/minikube-gitops.git
+       path: argocd/apps   # Trỏ vào thư mục chứa các app con
+     destination: { server: https://kubernetes.default.svc, namespace: argocd }
+     syncPolicy: { automated: { prune: true, selfHeal: true } }
+   ```
+2. Apply file `root.yaml` thủ công. Từ giờ, thư mục `argocd/apps/` đóng vai trò là danh sách các ứng dụng. Bất cứ khi nào ta thả file yaml định nghĩa ứng dụng vào thư mục này, Root App sẽ tự động phát hiện và đẻ ra ứng dụng đó trên cụm.
 
-### 6. Thứ tự triển khai với Sync Waves (Lab 6)
-- Xử lý tình trạng ứng dụng bị lỗi do khởi tạo sai thứ tự bằng cách thêm Annotation `argocd.argoproj.io/sync-wave`.
-- Ví dụ luồng triển khai được ép thứ tự: `Namespace (wave -1)` -> `Secret/ConfigMap (wave 0)` -> `Deployment Backend/Frontend/DB (wave 1)` -> `Service (wave 2)`.
+### Lab 6: Sync Waves (Thứ Tự Triển Khai)
+**Mục tiêu:** Định nghĩa thứ tự ưu tiên khi cài đặt các tài nguyên K8s để tránh lỗi do thiếu phụ thuộc (ví dụ Deployment chạy trước khi có Secret).
+**Các bước thực hiện:**
+1. Gắn annotation `argocd.argoproj.io/sync-wave` vào các file YAML:
+   - `namespace.yaml`: `sync-wave: "-1"` (Chạy đầu tiên để tạo chuồng).
+   - `secret.yaml`: `sync-wave: "0"`.
+   - `deployment.yaml`: `sync-wave: "1"` (Chỉ khởi chạy khi Secret đã sẵn sàng).
+   - `service.yaml`: `sync-wave: "2"`.
 
-### 7. Continuous Integration - CI (Lab 7)
-- Thiết lập GitHub Actions (`.github/workflows/validate.yml`) chạy mỗi khi có Pull Request.
-- Sử dụng công cụ `kubeconform` để rà soát (validate) các file YAML. Nếu file sai cấu trúc, quy tắc Branch Protection trên GitHub sẽ chặn nút Merge, bảo vệ nhánh `main` không bị nhiễm cấu hình rác.
+### Lab 7: CI (Continuous Integration) Kiểm Tra Mã Nguồn
+**Mục tiêu:** Dùng GitHub Actions chặn các file YAML bị lỗi cú pháp ngay từ cổng Pull Request.
+**Các bước thực hiện:**
+1. Tạo file `.github/workflows/validate.yml` gọi công cụ `kubeconform`.
+2. Truy cập GitHub Settings, thiết lập Branch Protection cho nhánh `main`. Yêu cầu mọi PR phải vượt qua bài test `validate` của GitHub Actions mới được phép Merge, tránh cấu hình rác lọt vào cụm.
 
 ---
 
-## PHẦN 2: OBSERVABILITY, CANARY & ALERTING (BUỔI CHIỀU)
+## PHẦN 2: OBSERVABILITY & CANARY (BUỔI CHIỀU)
 
-### 8. Cài đặt Argo Rollouts & Prometheus qua App-of-Apps
-- Thêm file `argo-rollouts.yaml` và `app-monitoring.yaml` (dùng Helm chart của `kube-prometheus-stack`) vào `argocd/apps/` rồi Push lên Git. Root App tự động cài đặt 2 hệ thống này vào cụm k8s.
+### Lab 8: Cài đặt Argo Rollouts & Prometheus qua GitOps
+**Mục tiêu:** Triển khai các công cụ đo lường và phát hành nâng cao.
+**Các bước thực hiện:**
+1. Thêm file định nghĩa `argo-rollouts.yaml` và `app-monitoring.yaml` (trỏ đến Helm Chart của Prometheus Stack) vào thư mục `argocd/apps/`.
+2. Push lên Git. Root Application sẽ lập tức nhận diện và tự động setup Controller Argo Rollouts cùng hệ thống Kube-Prometheus-Stack vào cụm.
 
-### 9. Triển khai Canary Deployment thủ công
-- Chuyển đổi ứng dụng API Flask từ `Deployment` truyền thống sang đối tượng `Rollout`.
-- Viết chiến lược Canary thủ công với các bước `setWeight: 25`, sau đó `pause: {}`. Hệ thống sẽ chuyển 25% traffic vào bản mới và chờ kỹ sư kiểm tra rồi gõ lệnh `kubectl argo rollouts promote` (đi tiếp) hoặc `abort` (quay xe) bằng tay.
+### Lab 9: Chuyển đổi sang Rollout & Cấu hình Canary Thủ Công
+**Mục tiêu:** Thay thế luồng RollingUpdate mặc định bằng chiến thuật nhả từ từ lượng truy cập (Canary).
+**Các bước thực hiện:**
+1. Mở file ứng dụng (ví dụ `api.yaml`), sửa dòng `kind: Deployment` thành `kind: Rollout`.
+2. Khai báo chiến lược Canary tạm dừng (Pause) vô thời hạn để kỹ sư test thử:
+   ```yaml
+   strategy:
+     canary:
+       steps:
+         - setWeight: 25
+         - pause: {} # Dừng ở mức 25% traffic và đợi lệnh
+   ```
+3. **Thao tác tay:** Khi kỹ sư thấy 25% ổn thỏa, họ sẽ gõ lệnh `kubectl argo rollouts promote api -n demo` để nâng lên 100%. Nếu có lỗi, họ gõ `abort` để quay xe.
 
-### 10. Auto-Canary (Tự động hóa hoàn toàn với AnalysisTemplate)
-- **Mục tiêu:** Loại bỏ sự can thiệp của con người.
-- **Thực hiện:**
-  - Viết `AnalysisTemplate` truy vấn Prometheus (đo tỷ lệ HTTP 200). Đặt thuộc tính `count` (ví dụ `count: 6`, mỗi lần 10s) để đo trong 1 khoảng thời gian cố định. Điều kiện pass là `result[0] >= 0.90`.
-  - Tích hợp Analysis vào bước Pause của Rollout.
-- **Kết quả:** Khi tung ra phiên bản lỗi (`ERROR_RATE=0.5`), Analysis phát hiện tỷ lệ thành công bị rớt xuống dưới 90%. Rollout ngay lập tức bị giật còi `Failed`, trạng thái chuyển sang `Degraded`, và hệ thống **tự động Abort**, tiêu diệt Pod lỗi và khôi phục 100% traffic về phiên bản cũ an toàn.
+### Lab 10: Auto-Canary (Tự Động Hóa Hoàn Toàn Bằng Analysis)
+**Mục tiêu:** Loại bỏ hoàn toàn sự phụ thuộc vào kỹ sư. Hệ thống tự chấm điểm bản phát hành và tự quyết định Abort nếu có lỗi.
+**Các bước thực hiện:**
+1. **Định nghĩa bài test:** Tạo `AnalysisTemplate` (`k8s-api/analysis.yaml`) chạy câu query Prometheus đo tỷ lệ HTTP 200.
+   ```yaml
+   successCondition: result[0] >= 0.90 # Yêu cầu độ ổn định >= 90%
+   query: |
+     sum(rate(flask_http_request_total{status="200"}[1m])) 
+     / sum(rate(flask_http_request_total[1m]))
+   ```
+2. **Tích hợp vào Canary:** Chèn bước `analysis` vào Rollout.
+   ```yaml
+         - setWeight: 25
+         - analysis:
+             templates:
+               - templateName: success-rate
+   ```
+3. **Kết quả:** Khi tung ra một bản cập nhật bị lỗi (`ERROR_RATE=0.5`), bước Analysis sẽ truy vấn Prometheus và phát hiện tỷ lệ thành công bị rớt xuống dưới 90%. Quá trình Canary lập tức bị đánh dấu `Failed`, trạng thái Rollout chuyển sang `Degraded`, hệ thống **tự động Abort** và khôi phục 100% traffic về phiên bản cũ để đảm bảo không sập diện rộng.
 
-### 11. Cảnh báo lỗi tự động qua Email (Alertmanager)
-- Kích hoạt Alertmanager trong file `app-monitoring.yaml`. Cấu hình SMTP trỏ về Gmail người nhận.
-- Tránh lộ mật khẩu trên Git bằng cách tạo Kubernetes Secret `alertmanager-secret` chứa **Google App Password** (do chính người dùng tạo qua lệnh `kubectl` trực tiếp).
-- Viết `PrometheusRule` quy định: "Nếu tỷ lệ lỗi HTTP 500 của API vượt quá 10% trong vòng 1 phút, kích hoạt nhãn HighErrorRate".
-- **Kết quả:** Khi API bị sập hoặc gặp lỗi diện rộng, Alertmanager sẽ nhận tín hiệu và gửi ngay một email cảnh báo khẩn cấp tới hòm thư của đội ngũ DevOps.
-
----
-**TỔNG KẾT:** Hệ thống đã hoàn thiện toàn bộ vòng đời của một ứng dụng Cloud Native hiện đại. Từ khâu tự động kiểm tra code (CI), tự động triển khai (CD - GitOps), phát hành an toàn từng phần (Canary), tự chấm điểm đo lường (Observability) cho đến báo động tức thời khi sự cố xảy ra (Alerting).
+### Lab 11: Thiết Lập Cảnh Báo Lỗi Qua Email (Alertmanager)
+**Mục tiêu:** Gửi báo động khẩn cấp tới email đội ngũ khi lỗi vượt ngưỡng.
+**Các bước thực hiện:**
+1. Kích hoạt Alertmanager trong Values của Helm chart Prometheus, cấu hình địa chỉ SMTP của Google (`smtp.gmail.com:587`) và email người nhận.
+2. **Bảo mật:** Không lưu mật khẩu trên Git. Khởi tạo Google App Password (mật khẩu ứng dụng gồm 16 chữ cái), sau đó gõ lệnh trực tiếp để chèn mật khẩu này vào một K8s Secret:
+   ```bash
+   kubectl create secret generic alertmanager-secret --from-literal=smtp-password="[APP_PASSWORD]" -n monitoring
+   ```
+3. **Viết luật cảnh báo:** Tạo `PrometheusRule` (`alert-rules.yaml`) định nghĩa điều kiện: "Nếu tỷ lệ lỗi HTTP 500 của API vượt mức 5% liên tục trong 1 phút, sẽ kích hoạt nhãn HighErrorRate".
+4. **Kết quả:** Khi dùng script `load-generator` bắn hàng ngàn request lỗi 500 vào hệ thống, Prometheus kích hoạt luật cảnh báo, Alertmanager chộp lấy thông tin này và dùng SMTP Secret gửi ngay một email có tựa đề đỏ chót tới hộp thư của nhóm DevOps.
