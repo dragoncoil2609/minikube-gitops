@@ -39,7 +39,13 @@ spec:
               group_wait: 10s
               group_interval: 1m
               repeat_interval: 1h
-              receiver: 'email-alert'
+              # Đổi hòm thư mặc định thành thùng rác (null) để chặn toàn bộ mail rác của K8s
+              receiver: 'null'
+              routes:
+                # Chỉ lọc ĐÚNG cái cảnh báo HighErrorRate của sếp mới được phép gửi Email
+                - matchers:
+                    - alertname = HighErrorRate
+                  receiver: 'email-alert'
             receivers:
             - name: 'null'
             - name: 'email-alert'

@@ -27,6 +27,8 @@ spec:
           value: "0.0" # Đã chỉnh về 0 để ngưng tạo lỗi ảo
         - name: VERSION
           value: "v3"
+        - name: RESTART_TRIGGER
+          value: "1" # Thêm biến này để ép ArgoCD chạy lại Rollout mới
         readinessProbe:
           httpGet:
             path: /healthz
