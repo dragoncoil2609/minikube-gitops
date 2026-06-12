@@ -24,7 +24,7 @@ spec:
           containerPort: 8080
         env:
         - name: ERROR_RATE
-          value: "0.5" # Cố tình tạo ra 50% lỗi để test tự động Abort
+          value: "0.0" # Đã chỉnh về 0 để ngưng tạo lỗi ảo
         - name: VERSION
           value: "v3"
         readinessProbe:
@@ -34,15 +34,20 @@ spec:
   strategy:
     canary:
       steps:
+      # Bước 1: Điều hướng 25% traffic vào phiên bản mới. 75% vẫn chạy bản cũ an toàn.
       - setWeight: 25
+      # Bước 2: Tự động chạy bài kiểm tra (Analysis) để đánh giá chất lượng 25% traffic mới này
       - analysis:
           templates:
-          - templateName: success-rate
+          - templateName: success-rate # Tên bài test được gọi từ file analysis.yaml
           args:
           - name: service-name
             value: api
+      # Bước 3: Nếu bài test pass (thành công), nhả tiếp 50% traffic
       - setWeight: 50
+      # Bước 4: Tạm dừng 30 giây để nghe ngóng tình hình (có thể bỏ bước này nếu muốn auto 100%)
       - pause: { duration: 30s }
+      # Bước 5: Nâng lên 100%, kết thúc thành công quá trình cập nhật
       - setWeight: 100
 ---
 apiVersion: v1
